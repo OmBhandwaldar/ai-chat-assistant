@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+node_modules/
+.next/
+*.duckdb
+chroma_db*/
+.DS_Store
+dist/
+build/
+response.json
+payload.json
