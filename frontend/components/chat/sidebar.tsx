@@ -25,7 +25,7 @@ import {
 
 const navItems = [
   { icon: Search, label: "Search", disabled: true },
-  { icon: SquarePen, label: "Chat", disabled: false },
+  { icon: SquarePen, label: "Chat", disabled: false }, // starts a new chat
   { icon: AudioLines, label: "Voice", disabled: true },
   { icon: ImagePlus, label: "Imagine", disabled: true },
 ];
@@ -46,6 +46,9 @@ export function Sidebar() {
   const currentUser = useAppStore((s) => s.currentUser);
   const setCurrentUser = useAppStore((s) => s.setCurrentUser);
   const conversations = useAppStore((s) => s.conversations);
+  const activeConversationId = useAppStore((s) => s.activeConversationId);
+  const startNewConversation = useAppStore((s) => s.startNewConversation);
+  const openConversation = useAppStore((s) => s.openConversation);
 
   if (collapsed) {
     return (
@@ -91,6 +94,7 @@ export function Sidebar() {
           <button
             key={label}
             disabled={disabled}
+            onClick={label === "Chat" ? startNewConversation : undefined}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-left",
               disabled
@@ -123,20 +127,24 @@ export function Sidebar() {
           </button>
         </div>
         <div className="flex flex-col gap-0.5">
-          {conversations.length === 0 ? (
+          {/* A chat that hasn't been sent yet isn't persisted, so show it as a draft row. */}
+          {activeConversationId === null && (
             <div className="rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-700">
               New conversation
             </div>
-          ) : (
-            conversations.map((c) => (
-              <button
-                key={c.conversation_id}
-                className="truncate rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
-              >
-                {c.title}
-              </button>
-            ))
           )}
+          {conversations.map((c) => (
+            <button
+              key={c.conversation_id}
+              onClick={() => openConversation(c.conversation_id)}
+              className={cn(
+                "truncate rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100",
+                c.conversation_id === activeConversationId && "bg-neutral-100 font-medium"
+              )}
+            >
+              {c.title}
+            </button>
+          ))}
           <button className="px-3 py-1.5 text-left text-sm text-neutral-400 hover:text-neutral-600">
             See all
           </button>

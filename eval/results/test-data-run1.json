@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "provider": "ollama/gemma4:12b",
+    "as_of": "2027-01-15T23:59:59",
+    "db": "/Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/data/test-data.duckdb",
+    "working_db": "/var/folders/43/k3f6dsz554b253970_wmtmsr0000gn/T/eval-db-o8de98w9/test-data.duckdb",
+    "dataset": "/Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/data/test-data/dataset",
+    "chroma": "/Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/data/test-data_chroma",
+    "timeout_s": 220.0,
+    "ollama_timeout_s": "210",
+    "finished": false,
+    "scoring": "not possible — final-questions.md has no expected answers",
+    "note": "Sample eval/expected.json was not used and was not modified."
+  },
+  "turns": [
+    {
+      "qid": "Q1",
+      "label": "Q1",
+      "name": "Michael Turner",
+      "user_id": "U-201",
+      "session": "q1",
+      "question": "All our wells feed one reservoir. Map the reservoir pressure across the field from the pressure data.",
+      "elapsed_s": 220.00528104102705,
+      "error": "TimeoutError: ",
+      "text": null,
+      "visual_type": null,
+      "visual": null,
+      "visual_preview": null,
+      "citations": null,
+      "citations_full": [],
+      "conflicts": [],
+      "tools": [],
+      "tool_calls": [],
+      "critic_issues": [],
+      "usage": {},
+      "scored": false
+    }
+  ]
+}

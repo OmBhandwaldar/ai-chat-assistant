@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "mode": "live/ollama",
+    "as_of": "2026-10-16",
+    "only": [
+      "Q3"
+    ],
+    "inject_today": false,
+    "db": "/Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/backend/data.duckdb",
+    "in_place": false,
+    "generated_at": "2026-10-17T12:16:57.930307+00:00"
+  },
+  "summary": {
+    "passed": 0,
+    "total": 1
+  },
+  "questions": [
+    {
+      "id": "Q3",
+      "passed": false,
+      "is_dependency": false,
+      "elapsed_s": 100.01,
+      "turns": [
+        {
+          "qid": "Q3",
+          "label": "Q3",
+          "kind": "primary",
+          "user_id": "U-203",
+          "question_text": "Show a line chart of WELL-0001's wellhead temperature against air temperature for the last 13 weeks, and mark when it was not producing oil.",
+          "scored": true,
+          "passed": false,
+          "failures": [],
+          "warnings": [],
+          "answer": null,
+          "tools": [],
+          "critic_issues": [],
+          "error": "TimeoutError: ",
+          "elapsed_s": 100.00518066703808,
+          "usage": {}
+        }
+      ]
+    }
+  ]
+}

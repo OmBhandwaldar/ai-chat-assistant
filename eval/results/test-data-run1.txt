@@ -1,0 +1,13 @@
+Test-data run (final-questions.md)
+provider: ollama/gemma4:12b
+as_of: 2027-01-15T23:59:59  (release notes: today is 15 Jan 2027)
+db: /Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/data/test-data.duckdb
+dataset: /Users/omb/sanctum/hacktoberfest-flytbase/ai-chat-assistant/data/test-data/dataset
+scoring: not applied. final-questions.md has no machine-readable expected answers, so a hidden key cannot be checked from this file. Nothing in eval/expected.json was changed.
+turns: 1  finished: False
+
+==============================================================================
+Q1  Michael Turner (U-201)  session=q1  220s  visual=None
+Q: All our wells feed one reservoir. Map the reservoir pressure across the field from the pressure data.
+ERROR: TimeoutError: 
+

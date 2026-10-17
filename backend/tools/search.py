@@ -22,6 +22,7 @@ from typing import Any
 
 import duckdb
 
+from backend.db.scope import resolve_scope, unresolved_fields
 from backend.models.schemas import Evidence, ToolResult
 
 _CHROMA_PATH = Path(__file__).resolve().parents[1] / "chroma_db"
@@ -73,9 +74,27 @@ def _chunk_text(text: str, window: int = _WINDOW_TOKENS, overlap: int = _OVERLAP
     return chunks
 
 
-def _ensure_fts_index(conn: duckdb.DuckDBPyConnection) -> None:
+def _fts_index_present(conn: duckdb.DuckDBPyConnection) -> bool:
+    row = conn.execute(
+        """
+        SELECT count(*) FROM information_schema.schemata
+        WHERE schema_name = 'fts_main_report_chunks'
+        """
+    ).fetchone()
+    return bool(row and row[0])
+
+
+def _ensure_fts_index(conn: duckdb.DuckDBPyConnection, *, rebuild: bool = False) -> None:
+    """Create the BM25 index only when it is missing.
+
+    Rebuilding on every search costs ~0.4s and does not change results while
+    report_chunks is unchanged. Callers that just rewrote the chunks pass
+    rebuild=True.
+    """
     conn.execute("INSTALL fts")
     conn.execute("LOAD fts")
+    if not rebuild and _fts_index_present(conn):
+        return
     conn.execute("PRAGMA create_fts_index('report_chunks', 'chunk_id', 'text', overwrite=1)")
 
 
@@ -148,7 +167,7 @@ def build_report_index(
                 metadatas=metadatas[i : i + batch_size],
             )
 
-    _ensure_fts_index(conn)
+    _ensure_fts_index(conn, rebuild=True)
     return len(chunk_rows)
 
 
@@ -208,6 +227,14 @@ def search_reports(
 ) -> ToolResult[dict]:
     """Find the report chunks most relevant to `query`, scoped by well
     and/or area and/or date range (Q9, Q10, Q13)."""
+    scope = resolve_scope(conn, area_id=area_id)
+    if not scope.ok:
+        return ToolResult[dict](
+            data={"query": query, "results": [], **unresolved_fields(scope)},
+            evidence=[],
+        )
+    area_id = scope.area_id
+
     build_report_index(conn, chroma_path=chroma_path)
 
     # --- Dense: ChromaDB top-20 ---
@@ -245,7 +272,7 @@ def search_reports(
         WHERE {where_sql}
         ORDER BY score DESC
         LIMIT 20
-        """,  # noqa: S608 (conditions built from a fixed allow-list of columns above)
+        """,  # conditions built from a fixed allow-list of columns above
         [query, *filter_params],
     ).fetchall()
     sparse_ids = [r[0] for r in sparse_rows]

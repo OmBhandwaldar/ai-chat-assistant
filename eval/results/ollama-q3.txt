@@ -1,0 +1,14 @@
+LIVE run: 1 question(s), 1 agent turn(s) (~70 s each on the free tier).
+DB: /var/folders/43/k3f6dsz554b253970_wmtmsr0000gn/T/eval-db-nb7dn583/data.duckdb  (temp copy)  mode: live/ollama
+Q3
+  [ERR ] Q3         U-203 100.0s  Show a line chart of WELL-0001's wellhead temperature against air temp
+wrote eval/results/ollama-q3.json
+
+Q         turns  visual         time  tools
+-------------------------------------------
+Q3    ❌   0/1    -              100s  -
+
+Details:
+❌ Q3 [U-203] ERROR: TimeoutError: 
+
+SUMMARY: 0/1 passed (0%)  failed: Q3

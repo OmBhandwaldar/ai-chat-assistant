@@ -123,6 +123,22 @@ CREATE TABLE IF NOT EXISTS maintenance_reports (
     body            VARCHAR NOT NULL
 );
 
+-- Report files found on disk that no maintenance row (by report_file, file
+-- name or report header) points at. Kept for traceability, but NOT indexed
+-- for retrieval: a retrieval hit must resolve to a maintenance_id (evidence).
+CREATE TABLE IF NOT EXISTS orphan_reports (
+    report_path     VARCHAR PRIMARY KEY,
+    asset_id        VARCHAR NOT NULL,
+    body            VARCHAR NOT NULL
+);
+
+-- What the last ingest run skipped / repaired (written by scripts/ingest.py).
+CREATE TABLE IF NOT EXISTS ingest_warnings (
+    category        VARCHAR PRIMARY KEY,
+    n               INTEGER NOT NULL,
+    sample          VARCHAR
+);
+
 CREATE TABLE IF NOT EXISTS report_chunks (
     chunk_id        VARCHAR PRIMARY KEY,
     report_path     VARCHAR NOT NULL REFERENCES maintenance_reports(report_path),

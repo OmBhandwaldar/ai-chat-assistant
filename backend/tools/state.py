@@ -17,6 +17,7 @@ from datetime import date, datetime
 import duckdb
 
 from backend.db.resolver import resolve_well_state
+from backend.db.scope import resolve_scope, unresolved_fields
 from backend.models.schemas import Evidence, ToolResult
 
 _ID_PREFIX_TO_SOURCE_TYPE = {
@@ -27,6 +28,7 @@ _ID_PREFIX_TO_SOURCE_TYPE = {
 }
 
 _ID_RE = re.compile(r"\b(INS|CTX|MNT|REG)-[\w-]+\b")
+_OVERRIDE_RE = re.compile(r"override #(\d+)")
 
 
 def _evidence_from_reasons(reasons: list[str]) -> list[Evidence]:
@@ -41,6 +43,11 @@ def _evidence_from_reasons(reasons: list[str]) -> list[Evidence]:
             seen.add(full_id)
             prefix = m.group(1)
             evidence.append(Evidence(source_type=_ID_PREFIX_TO_SOURCE_TYPE[prefix], source_id=full_id))
+        # Feedback overrides (Q12/Q15): cite the override row itself.
+        for m in _OVERRIDE_RE.finditer(reason):
+            if f"override:{m.group(1)}" not in seen:
+                seen.add(f"override:{m.group(1)}")
+                evidence.append(Evidence(source_type="override", source_id=m.group(1)))
     return evidence
 
 
@@ -71,6 +78,18 @@ def wells_not_producing(
 ) -> ToolResult[dict]:
     """Which wells in this scope are not producing oil right now, and why? (Q2)"""
     as_of = as_of or date(2026, 10, 16)
+    scope = resolve_scope(conn, area_id=area_id, team_id=team_id)
+    if not scope.ok:
+        return ToolResult[dict](
+            data={
+                "as_of": as_of.isoformat(),
+                "wells": [],
+                "corrections_applied": [],
+                **unresolved_fields(scope),
+            },
+            evidence=[],
+        )
+    area_id, team_id = scope.area_id, scope.team_id
 
     conditions = ["p.is_producing = FALSE"]
     params: list = []
@@ -94,7 +113,7 @@ def wells_not_producing(
         JOIN inspections i ON i.inspection_id = p.inspection_id
         WHERE {where_clause}
         ORDER BY w.asset_id
-        """,  # noqa: S608 (conditions built from a fixed allow-list of columns above)
+        """,
         params,
     ).fetchall()
 
@@ -161,7 +180,50 @@ def wells_not_producing(
             "reason": reason,
         })
 
+    # Wells in this scope whose latest reading carries a user correction (Q12): the
+    # list above already reflects it, so say which wells were included/excluded because
+    # of it, who corrected them, and what the original reading was.
+    scope_clause = " AND ".join(["TRUE", *conditions[1:]])  # drop the is_producing filter
+    corrections = _corrected_latest_readings(conn, scope_clause, params)
+    for corr in corrections:
+        evidence.append(Evidence(source_type="override", source_id=str(corr["override_id"])))
+
     return ToolResult[dict](
-        data={"as_of": as_of.isoformat(), "wells": wells},
+        data={"as_of": as_of.isoformat(), "wells": wells, "corrections_applied": corrections},
         evidence=evidence,
     )
+
+
+def _corrected_latest_readings(
+    conn: duckdb.DuckDBPyConnection, where_clause: str, params: list
+) -> list[dict]:
+    rows = conn.execute(
+        f"""
+        SELECT w.asset_id, p.inspection_id, p.is_producing, p.delta_c,
+               o.id, o.original_value, o.new_value, u.name, o.reason
+        FROM v_well_latest_inspection p
+        JOIN wells w ON w.asset_id = p.asset_id
+        JOIN overrides o ON o.scope_type = 'inspection' AND o.scope_id = p.inspection_id
+                        AND o.field = 'wellhead_temp_c'
+        LEFT JOIN users u ON u.user_id = o.author_user_id
+        WHERE {where_clause}
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY p.inspection_id ORDER BY o.created_at DESC, o.id DESC) = 1
+        ORDER BY w.asset_id
+        """,
+        params,
+    ).fetchall()
+    return [
+        {
+            "asset_id": asset_id,
+            "inspection_id": inspection_id,
+            "now_producing": bool(is_producing),
+            "delta_c": delta_c,
+            "override_id": override_id,
+            "original_value": original,
+            "corrected_value": new_value,
+            "author": author,
+            "reason": reason,
+        }
+        for asset_id, inspection_id, is_producing, delta_c, override_id,
+            original, new_value, author, reason in rows
+    ]

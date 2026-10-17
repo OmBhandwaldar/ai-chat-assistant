@@ -16,6 +16,7 @@ from datetime import date, datetime
 
 import duckdb
 
+from backend.db.scope import resolve_scope, unresolved_fields
 from backend.models.schemas import Evidence, ToolResult
 
 
@@ -68,6 +69,19 @@ def top_downtime(
     limit: int = 3,
 ) -> ToolResult[dict]:
     """Which wells in this scope had the most downtime in [start, end]? (Q6)"""
+    scope = resolve_scope(conn, area_id=area_id, team_id=team_id)
+    if not scope.ok:
+        return ToolResult[dict](
+            data={
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "wells": [],
+                **unresolved_fields(scope),
+            },
+            evidence=[],
+        )
+    area_id, team_id = scope.area_id, scope.team_id
+
     conditions = ["p.inspected_at >= ?", "p.inspected_at <= ?", "p.is_producing = FALSE"]
     params: list = [start, end]
     if area_id is not None:
@@ -92,7 +106,7 @@ def top_downtime(
         GROUP BY w.asset_id, w.name, w.well_type
         ORDER BY downtime_days DESC, w.asset_id
         LIMIT ?
-        """,  # noqa: S608 (conditions built from a fixed allow-list of columns above)
+        """,  # conditions built from a fixed allow-list of columns above
         [*params, limit],
     ).fetchall()
 

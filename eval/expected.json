@@ -1,0 +1,963 @@
+{
+  "_meta": {
+    "description": "Expected answers for the 18 example questions in 03-evaluation-queries.md (sample dataset, 200 wells). Transcribed by hand; machine-checked by eval/scoring.py.",
+    "as_of": "2026-10-16",
+    "run_order": "Questions run top to bottom in ONE process against ONE database, so stateful questions work. 'depends_on' = hard prerequisites (history/state the question needs; auto-included by `--only`). 'runs_after' = ordering only (the question would see a different answer if it ran later).",
+    "turn_model": "Each entry has an optional list of pre_turns, then the primary turn (question_text/user_id/expected), then optional post_turns. A turn with an 'expected' block is scored; one without is setup only (e.g. a user stating a fact). All turns sharing a 'conversation' label are one chat; a different label is a new chat. The question passes only if every scored turn passes.",
+    "expected_keys": {
+      "visual_type": "string | list of acceptable strings | null (not checked)",
+      "text_contains": "list; each item is a string or a list of alternatives (any-of); case-insensitive substring",
+      "text_not_contains": "list of substrings that must be absent",
+      "numbers": "{name: value}; value must appear in text within 0.5% (structured IDs and dates are ignored)",
+      "visual_numbers": "same, searched in the JSON of visual.data",
+      "well_ids_in_data": "well IDs that must appear in visual.data",
+      "well_ids_not_in_data": "well IDs that must NOT appear in visual.data",
+      "visual_data_contains": "substrings that must appear in the JSON of visual.data",
+      "citations_must_include": "source_ids that must be present in citations",
+      "min_citations": "minimum number of citations",
+      "conflicts_min": "minimum number of entries in conflicts",
+      "<key>_optional": "any check key with this suffix is reported as a warning and never fails the question"
+    }
+  },
+  "Q1": {
+    "id": "Q1",
+    "question_text": "Is WELL-0001 producing oil right now? When was it last inspected, and by whom? Show me its status card.",
+    "user_id": "U-203",
+    "conversation": "Q1",
+    "depends_on": [],
+    "runs_after": [],
+    "expected": {
+      "visual_type": "status_card",
+      "text_contains": [
+        [
+          "not producing",
+          "not currently producing",
+          "isn't producing",
+          "is not producing",
+          "no,"
+        ],
+        "INS-0001-0203",
+        "Ryan Brooks",
+        [
+          "15 Oct",
+          "2026-10-15",
+          "October 15",
+          "Oct 15"
+        ],
+        "CTX-0001-003"
+      ],
+      "text_contains_optional": [
+        "Jake Morales",
+        [
+          "out of date",
+          "stale",
+          "outdated"
+        ],
+        [
+          "20 Oct",
+          "2026-10-20",
+          "October 20"
+        ],
+        [
+          "7 Oct",
+          "2026-10-07",
+          "October 7"
+        ],
+        "drone"
+      ],
+      "numbers": {
+        "delta_c": 3.2
+      },
+      "citations_must_include": [
+        "INS-0001-0203",
+        "CTX-0001-003"
+      ]
+    }
+  },
+  "Q2": {
+    "id": "Q2",
+    "question_text": "Which wells in Northeast Block 8 are not producing oil right now, and why? Show them in a table.",
+    "user_id": "U-203",
+    "conversation": "Q2",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Runs before Q12 mutates WELL-0164. Two wells (0164, 0175) have no recorded reason; the answer must say so rather than invent a cause.",
+    "expected": {
+      "visual_type": "table",
+      "text_contains": [
+        "WELL-0164",
+        "WELL-0170",
+        "WELL-0172",
+        "WELL-0175",
+        "MNT-0170-031",
+        "MNT-0172-028",
+        [
+          "no recorded reason",
+          "no reason",
+          "no explanation",
+          "not recorded",
+          "unexplained",
+          "no known reason",
+          "no documented reason",
+          "nothing explains"
+        ]
+      ],
+      "text_contains_optional": [
+        "Pump jack not moving"
+      ],
+      "well_ids_in_data": [
+        "WELL-0164",
+        "WELL-0170",
+        "WELL-0172",
+        "WELL-0175"
+      ],
+      "visual_numbers_optional": {
+        "delta_0164": 4.1,
+        "delta_0170": 2.9,
+        "delta_0172": 5.7,
+        "delta_0175": 0.4
+      },
+      "citations_must_include": [
+        "INS-0164-0205",
+        "INS-0170-0206",
+        "INS-0172-0206",
+        "INS-0175-0204",
+        "MNT-0170-031",
+        "MNT-0172-028"
+      ]
+    }
+  },
+  "Q3": {
+    "id": "Q3",
+    "question_text": "Show a line chart of WELL-0001's wellhead temperature against air temperature for the last 13 weeks, and mark when it was not producing oil.",
+    "user_id": "U-203",
+    "conversation": "Q3",
+    "depends_on": [],
+    "runs_after": [],
+    "expected": {
+      "visual_type": "line",
+      "text_contains": [
+        "WELL-0001",
+        [
+          "8 Oct",
+          "2026-10-08",
+          "October 8",
+          "Oct 8"
+        ],
+        [
+          "15 Oct",
+          "2026-10-15",
+          "October 15",
+          "Oct 15"
+        ]
+      ],
+      "visual_data_contains": [
+        "2026-10-15"
+      ],
+      "numbers_optional": {
+        "readings": 13
+      },
+      "citations_must_include": [
+        "INS-0001-0203"
+      ],
+      "min_citations": 1
+    }
+  },
+  "Q4": {
+    "id": "Q4",
+    "question_text": "How many oil spills has WELL-0001 had in the last 4 years, and how much oil in total? List them in a table.",
+    "user_id": "U-203",
+    "conversation": "Q4",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "7 detections, but INS-0001-0070 was corrected as rainwater (CTX-0001-001) and must not count.",
+    "expected": {
+      "visual_type": "table",
+      "text_contains": [
+        "WELL-0001"
+      ],
+      "text_contains_optional": [
+        "INS-0001-0070",
+        [
+          "rainwater",
+          "rain water"
+        ],
+        "CTX-0001-001"
+      ],
+      "numbers": {
+        "spill_count": 6,
+        "total_bbl": 15.1
+      },
+      "visual_numbers_optional": {
+        "s1": 0.5,
+        "s2": 2.6,
+        "s3": 3.3,
+        "s4": 0.3,
+        "s5": 6.8,
+        "s6": 1.6
+      },
+      "citations_must_include": [
+        "INS-0001-0021",
+        "INS-0001-0027",
+        "INS-0001-0048",
+        "INS-0001-0051",
+        "INS-0001-0185",
+        "INS-0001-0201"
+      ]
+    }
+  },
+  "Q5": {
+    "id": "Q5",
+    "question_text": "How many days was WELL-0001 down in 2025?",
+    "user_id": "U-203",
+    "conversation": "Q5",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "No visual needed. 3 weekly inspections x 7 days. The 24 Jul reading (51.6 C wellhead, 43.1 C air) is a trap: only the 8.5 C delta matters. The MNT causes live in repair records/reports (no dedicated tool), so they are optional.",
+    "expected": {
+      "visual_type": "none",
+      "text_contains": [
+        "WELL-0001"
+      ],
+      "text_contains_optional": [
+        "MNT-0001-021",
+        "MNT-0001-023",
+        [
+          "24 Jul",
+          "2025-07-24",
+          "July 24",
+          "Jul 24"
+        ],
+        [
+          "16 Oct",
+          "2025-10-16",
+          "October 16"
+        ],
+        [
+          "23 Oct",
+          "2025-10-23",
+          "October 23"
+        ]
+      ],
+      "numbers": {
+        "days": 21
+      },
+      "numbers_optional": {
+        "delta_c_24jul": 8.5
+      },
+      "citations_must_include": [
+        "INS-0001-0140",
+        "INS-0001-0152",
+        "INS-0001-0153"
+      ]
+    }
+  },
+  "Q6": {
+    "id": "Q6",
+    "question_text": "Which 3 wells in Northeast Block 7 had the most downtime in the last 4 months? Show a bar chart.",
+    "user_id": "U-201",
+    "conversation": "Q6",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Asked by Michael Turner (U-201) because Q11 ('the three wells we discussed yesterday') relies on his history. Window 16 Jun - 16 Oct 2026. WELL-0119 (28 days) is 4th and must not appear.",
+    "expected": {
+      "visual_type": "bar",
+      "text_contains": [
+        "WELL-0121",
+        "WELL-0138",
+        "WELL-0107"
+      ],
+      "well_ids_in_data": [
+        "WELL-0121",
+        "WELL-0138",
+        "WELL-0107"
+      ],
+      "well_ids_not_in_data": [
+        "WELL-0119"
+      ],
+      "numbers": {
+        "WELL-0121_days": 49,
+        "WELL-0138_days": 42,
+        "WELL-0107_days": 42
+      },
+      "min_citations": 1
+    }
+  },
+  "Q7": {
+    "id": "Q7",
+    "question_text": "Show on a map every well in Northeast Block 8 with a real spill in the last 90 days.",
+    "user_id": "U-203",
+    "conversation": "Q7",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Must run before Q13, which changes WELL-0151's volume from 4.5 to 5.4 bbl.",
+    "expected": {
+      "visual_type": "map",
+      "well_ids_in_data": [
+        "WELL-0151",
+        "WELL-0165",
+        "WELL-0175",
+        "WELL-0186"
+      ],
+      "text_contains_optional": [
+        "WELL-0151",
+        "WELL-0165",
+        "WELL-0175",
+        "WELL-0186"
+      ],
+      "visual_numbers_optional": {
+        "bbl_0151": 4.5,
+        "bbl_0165": 1.2,
+        "bbl_0175": 3.9,
+        "bbl_0186": 0.6
+      },
+      "citations_must_include": [
+        "INS-0151-0201",
+        "INS-0165-0194",
+        "INS-0175-0193",
+        "INS-0186-0097"
+      ]
+    }
+  },
+  "Q8": {
+    "id": "Q8",
+    "question_text": "Show a heatmap of 2026 spills by geographic area and month.",
+    "user_id": "U-203",
+    "conversation": "Q8",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Area totals: SW-23 35, SW-24 43, NE-7 37, NE-8 26 (corrected detections removed).",
+    "expected": {
+      "visual_type": "heatmap",
+      "visual_data_contains": [
+        "Southwest Block 23",
+        "Southwest Block 24",
+        "Northeast Block 7",
+        "Northeast Block 8"
+      ],
+      "visual_numbers_optional": {
+        "sw23": 35,
+        "sw24": 43,
+        "ne7": 37,
+        "ne8": 26
+      },
+      "numbers_optional": {
+        "sw24_total": 43
+      },
+      "min_citations": 1
+    }
+  },
+  "Q9": {
+    "id": "Q9",
+    "question_text": "Which rules has WELL-0001 broken in the last 12 months, and what is still open?",
+    "user_id": "U-203",
+    "conversation": "Q9",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "4 breaches from the 11 Jun 2026 spill (6.8 bbl): SR-01 (41 h vs 24 h, REG-0001-001, NOV REG-0001-002, USD 5,000 open), SR-02 (~7 h vs 4 h, only in the June report), SR-03 (due 10 Aug, REG-0001-003 open), RC-04 (response due 30 Jul, none). Pending: flowline RCA (MNT-0001-028/-029/-032), planned shut-in CTX-0001-003 not in maintenance system. RC-02 was met (7 Mar 2026).",
+    "expected": {
+      "visual_type": [
+        "table",
+        "none"
+      ],
+      "text_contains": [
+        "SR-01",
+        "SR-02",
+        "SR-03",
+        "RC-04",
+        "REG-0001-001",
+        "REG-0001-002",
+        "REG-0001-003"
+      ],
+      "text_contains_optional": [
+        "CTX-0001-003",
+        [
+          "root-cause",
+          "root cause",
+          "RCA"
+        ],
+        "RC-02",
+        [
+          "10 Aug",
+          "2026-08-10",
+          "August 10"
+        ],
+        [
+          "30 Jul",
+          "2026-07-30",
+          "July 30"
+        ]
+      ],
+      "numbers": {
+        "sr01_hours": 41,
+        "sr01_limit_hours": 24,
+        "sr02_hours": 7,
+        "fine_usd": 5000
+      },
+      "citations_must_include": [
+        "REG-0001-001",
+        "REG-0001-002",
+        "REG-0001-003"
+      ]
+    }
+  },
+  "Q10": {
+    "id": "Q10",
+    "question_text": "In Southwest Block 24, which spills in the last 90 days were not contained within the SOP time limit?",
+    "user_id": "U-203",
+    "conversation": "Q10",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Containment times exist only inside free-text repair reports (search_reports needed). Limit is 4 h (SR-02).",
+    "expected": {
+      "visual_type": "table",
+      "text_contains": [
+        "WELL-0082",
+        "WELL-0100"
+      ],
+      "text_contains_optional": [
+        "INS-0082-0198",
+        "INS-0100-0196",
+        [
+          "4 hours",
+          "4 h",
+          "SR-02"
+        ]
+      ],
+      "well_ids_in_data": [
+        "WELL-0082",
+        "WELL-0100"
+      ],
+      "numbers": {
+        "WELL-0082_hours": 7.1,
+        "WELL-0100_hours": 8.1
+      },
+      "citations_must_include": [
+        "MNT-0082-028",
+        "MNT-0100-034"
+      ]
+    }
+  },
+  "Q11": {
+    "id": "Q11",
+    "question_text": "For the three wells we discussed yesterday, what have repairs cost this year?",
+    "user_id": "U-201",
+    "conversation": "Q11",
+    "depends_on": [
+      "Q6"
+    ],
+    "runs_after": [],
+    "notes": "Day 2, Michael Turner, new chat. Needs his Q6 history (recall_user_context). Q1-Q5/Q7-Q10 are asked by Ashley Bennett (U-203) so Michael's history holds only Q6, like the real scenario.",
+    "expected": {
+      "visual_type": [
+        "bar",
+        "table",
+        "none"
+      ],
+      "text_contains": [
+        "WELL-0121",
+        "WELL-0138",
+        "WELL-0107"
+      ],
+      "numbers": {
+        "WELL-0121_usd": 25794,
+        "WELL-0138_usd": 46942,
+        "WELL-0107_usd": 5176
+      },
+      "min_citations": 1
+    }
+  },
+  "Q12": {
+    "id": "Q12",
+    "question_text": "The 15 Oct reading for WELL-0164 is wrong. The handheld thermal gun used in that inspection was faulty; the field crew re-measured the wellhead at 41.0 °C.",
+    "user_id": "U-201",
+    "conversation": "Q12",
+    "depends_on": [],
+    "runs_after": [
+      "Q2"
+    ],
+    "notes": "Correction recorded on INS-0164-0205 (original 24.0 kept). WELL-0164 flips to producing; the inspector note 'Pump jack not moving.' (Tyler Hughes) conflicts and Michael is asked to confirm. Then Michael re-asks Q2: three wells, WELL-0164 gone.",
+    "pre_turns": [],
+    "expected": {
+      "visual_type": [
+        "status_card",
+        "none",
+        "table"
+      ],
+      "text_contains": [
+        "INS-0164-0205",
+        [
+          "not moving",
+          "Pump jack not moving"
+        ],
+        [
+          "confirm"
+        ],
+        [
+          "is producing",
+          "now producing",
+          "is now producing",
+          "producing again",
+          "yes"
+        ]
+      ],
+      "text_contains_optional": [
+        "Tyler Hughes",
+        "21.1",
+        "faulty"
+      ],
+      "numbers": {
+        "original_c": 24.0,
+        "corrected_c": 41.0
+      },
+      "numbers_optional": {
+        "delta_c": 21.1
+      },
+      "citations_must_include": [
+        "INS-0164-0205"
+      ],
+      "conflicts_min": 1
+    },
+    "post_turns": [
+      {
+        "label": "Q12b",
+        "question_text": "Which wells in Northeast Block 8 are not producing oil right now, and why? Show them in a table.",
+        "user_id": "U-201",
+        "conversation": "Q12",
+        "expected": {
+          "visual_type": "table",
+          "text_contains": [
+            "WELL-0170",
+            "WELL-0172",
+            "WELL-0175"
+          ],
+          "text_contains_optional": [
+            [
+              "corrected",
+              "correction",
+              "no longer"
+            ]
+          ],
+          "well_ids_in_data": [
+            "WELL-0170",
+            "WELL-0172",
+            "WELL-0175"
+          ],
+          "well_ids_not_in_data": [
+            "WELL-0164"
+          ],
+          "min_citations": 1
+        }
+      }
+    ]
+  },
+  "Q13": {
+    "id": "Q13",
+    "question_text": "The AI estimated the 24 Sep spill at WELL-0151 as 4.5 bbl. The field crew measured 5.4 bbl.",
+    "user_id": "U-201",
+    "conversation": "Q13",
+    "depends_on": [],
+    "runs_after": [
+      "Q7"
+    ],
+    "notes": "Correction recorded on INS-0151-0201 (AI estimate 4.5 kept). 5.4 bbl is reportable (>= 5): SR-01 written notice due 24 h after 24 Sep 15:30, none on record -> possible breach. MNT-0151-025 classed it 'moderate' based on the old estimate (stale); report also shows ~6.4 h containment (SR-02 breach). SR-03 verification due 23 Nov 2026.",
+    "expected": {
+      "visual_type": [
+        "none",
+        "table",
+        "status_card"
+      ],
+      "text_contains": [
+        "INS-0151-0201",
+        "SR-01",
+        [
+          "reportable",
+          "report to the regulator",
+          "must be reported"
+        ]
+      ],
+      "text_contains_optional": [
+        "SR-03",
+        [
+          "23 Nov",
+          "2026-11-23",
+          "November 23"
+        ],
+        "MNT-0151-025",
+        "SR-02",
+        [
+          "moderate"
+        ],
+        [
+          "no written notice",
+          "none recorded",
+          "no notice",
+          "not recorded",
+          "none on record",
+          "no record"
+        ]
+      ],
+      "numbers": {
+        "corrected_bbl": 5.4,
+        "original_bbl": 4.5
+      },
+      "numbers_optional": {
+        "containment_hours": 6.4
+      },
+      "citations_must_include": [
+        "INS-0151-0201"
+      ]
+    }
+  },
+  "Q14": {
+    "id": "Q14",
+    "question_text": "Which wells in Northeast Block 7 need a root-cause analysis on their pump jack?",
+    "user_id": "U-201",
+    "conversation": "Q14-reask",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Michael Turner, three steps. (1) Asks which NE-7 wells need a pump-jack RCA: WELL-0108, 0121, 0138 (3 repairs each). (2) States a T350-scoped rule: RCA after 2 repairs, not 3 (setup turn, not scored). (3) In a NEW chat asks again: WELL-0108, 0120, 0121, 0138; WELL-0102 (T200, 2 repairs) must NOT appear; the answer says it follows his rule, not the manual. The primary turn is step 3.",
+    "pre_turns": [
+      {
+        "label": "Q14a",
+        "question_text": "Which wells in Northeast Block 7 need a root-cause analysis on their pump jack?",
+        "user_id": "U-201",
+        "conversation": "Q14-ask",
+        "expected": {
+          "visual_type": "table",
+          "text_contains": [
+            "WELL-0108",
+            "WELL-0121",
+            "WELL-0138"
+          ],
+          "well_ids_in_data": [
+            "WELL-0108",
+            "WELL-0121",
+            "WELL-0138"
+          ],
+          "well_ids_not_in_data": [
+            "WELL-0120",
+            "WELL-0102"
+          ],
+          "numbers": {
+            "corrective_repairs": 3
+          },
+          "min_citations": 3
+        }
+      },
+      {
+        "label": "Q14-rule",
+        "question_text": "Note for all T350 wells: our team now wants a pump jack root-cause analysis after 2 repairs, not 3.",
+        "user_id": "U-201",
+        "conversation": "Q14-rule"
+      }
+    ],
+    "expected": {
+      "visual_type": "table",
+      "text_contains": [
+        "WELL-0108",
+        "WELL-0120",
+        "WELL-0121",
+        "WELL-0138",
+        [
+          "Michael Turner",
+          "updated threshold",
+          "your rule",
+          "your note",
+          "team rule",
+          "not the manual",
+          "rather than the manual"
+        ]
+      ],
+      "well_ids_in_data": [
+        "WELL-0108",
+        "WELL-0120",
+        "WELL-0121",
+        "WELL-0138"
+      ],
+      "well_ids_not_in_data": [
+        "WELL-0102"
+      ],
+      "min_citations": 3
+    },
+    "post_turns": []
+  },
+  "Q15": {
+    "id": "Q15",
+    "question_text": "Is WELL-0164 producing oil right now?",
+    "user_id": "U-202",
+    "conversation": "Q15-jessica",
+    "depends_on": [
+      "Q12",
+      "Q13"
+    ],
+    "runs_after": [],
+    "notes": "Jessica Reed, own chat: yes, per Michael's corrected 41.0 C; mentions the correction author and the disagreeing inspector note. Then Laura Simmons asks about NE-8 spills needing a regulator report: WELL-0151 only (5.4 bbl after Q13), flagged overdue.",
+    "expected": {
+      "visual_type": [
+        "status_card",
+        "none",
+        "table"
+      ],
+      "text_contains": [
+        "WELL-0164",
+        "Michael Turner",
+        [
+          "not moving",
+          "Pump jack not moving"
+        ],
+        [
+          "is producing",
+          "now producing",
+          "is now producing",
+          "producing again",
+          "yes"
+        ]
+      ],
+      "text_contains_optional": [
+        "41"
+      ],
+      "numbers": {
+        "corrected_c": 41.0
+      },
+      "citations_must_include": [
+        "INS-0164-0205"
+      ],
+      "conflicts_min": 1
+    },
+    "post_turns": [
+      {
+        "label": "Q15b",
+        "question_text": "Which spills in Northeast Block 8 in the last 90 days needed a report to the regulator?",
+        "user_id": "U-401",
+        "conversation": "Q15-laura",
+        "expected": {
+          "visual_type": [
+            "table",
+            "none",
+            "map"
+          ],
+          "text_contains": [
+            "WELL-0151",
+            [
+              "overdue",
+              "no written notice",
+              "none recorded",
+              "no notice",
+              "not recorded",
+              "none on record",
+              "no record",
+              "not filed",
+              "breach"
+            ]
+          ],
+          "well_ids_not_in_data": [
+            "WELL-0165",
+            "WELL-0175",
+            "WELL-0186"
+          ],
+          "numbers": {
+            "corrected_bbl": 5.4
+          },
+          "citations_must_include": [
+            "INS-0151-0201"
+          ]
+        }
+      }
+    ]
+  },
+  "Q16": {
+    "id": "Q16",
+    "question_text": "Is any downtime planned for WELL-0007?",
+    "user_id": "U-201",
+    "conversation": "Q16-michael",
+    "depends_on": [
+      "Q11"
+    ],
+    "runs_after": [],
+    "notes": "Jake Morales posts a shared note (setup). Michael, new chat: yes, from 17 Oct for ~10 days per Jake. Then Jessica Reed asks the Q11 question: she has no such earlier conversation; she must NOT get Michael's wells or costs.",
+    "pre_turns": [
+      {
+        "label": "Q16-setup",
+        "question_text": "FYI for everyone: WELL-0007 will be shut in from 17 Oct for a 10-day planned workover.",
+        "user_id": "U-102",
+        "conversation": "Q16-jake"
+      }
+    ],
+    "expected": {
+      "visual_type": null,
+      "text_contains": [
+        "Jake Morales",
+        [
+          "17 Oct",
+          "2026-10-17",
+          "October 17",
+          "Oct 17"
+        ],
+        [
+          "10 days",
+          "10-day",
+          "10 day",
+          "ten days",
+          "27 Oct",
+          "2026-10-27"
+        ]
+      ],
+      "min_citations": 1
+    },
+    "post_turns": [
+      {
+        "label": "Q16b",
+        "question_text": "For the three wells we discussed yesterday, what have repairs cost this year?",
+        "user_id": "U-202",
+        "conversation": "Q16-jessica",
+        "expected": {
+          "visual_type": null,
+          "text_contains": [
+            [
+              "no earlier",
+              "no previous",
+              "no prior",
+              "don't have",
+              "do not have",
+              "no record",
+              "no such",
+              "not have any",
+              "haven't",
+              "no conversation",
+              "no history",
+              "no evidence",
+              "not able to find",
+              "couldn't find",
+              "could not find",
+              "no past",
+              "no recollection",
+              "unable to find",
+              "don't see",
+              "do not see"
+            ]
+          ],
+          "text_not_contains": [
+            "WELL-0121",
+            "WELL-0138",
+            "WELL-0107",
+            "25,794",
+            "25794",
+            "46,942",
+            "46942",
+            "5,176",
+            "5176"
+          ]
+        }
+      }
+    ]
+  },
+  "Q17": {
+    "id": "Q17",
+    "question_text": "WELL-0175 is running fine.",
+    "user_id": "U-204",
+    "conversation": "Q17-tyler",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "Michael states WELL-0175 has been shut in since 14 Oct (setup). Tyler Hughes then claims it is running fine: the 15 Oct inspection (Jessica Reed) shows +0.4 C, not producing; matches Michael, not Tyler; both kept, Tyler's marked unconfirmed, ask for confirmation. Then Jake claims WELL-0001 is back online since 14 Oct: INS-0001-0203 shows not producing, CTX-0001-003 expects ~20 Oct; recorded as unconfirmed.",
+    "pre_turns": [
+      {
+        "label": "Q17-setup",
+        "question_text": "WELL-0175 has been shut in for planned work since 14 Oct.",
+        "user_id": "U-201",
+        "conversation": "Q17-michael"
+      }
+    ],
+    "expected": {
+      "visual_type": null,
+      "text_contains": [
+        "WELL-0175",
+        "Jessica Reed",
+        [
+          "not producing",
+          "isn't producing",
+          "is not producing"
+        ],
+        "unconfirmed",
+        "confirm"
+      ],
+      "text_contains_optional": [
+        "Michael Turner"
+      ],
+      "numbers": {
+        "delta_c": 0.4
+      },
+      "citations_must_include": [
+        "INS-0175-0204"
+      ],
+      "conflicts_min": 1
+    },
+    "post_turns": [
+      {
+        "label": "Q17b",
+        "question_text": "WELL-0001 is back online since 14 Oct.",
+        "user_id": "U-102",
+        "conversation": "Q17-jake",
+        "expected": {
+          "visual_type": null,
+          "text_contains": [
+            "WELL-0001",
+            "INS-0001-0203",
+            [
+              "not producing",
+              "isn't producing",
+              "is not producing"
+            ],
+            "CTX-0001-003",
+            [
+              "20 Oct",
+              "2026-10-20",
+              "October 20"
+            ],
+            "unconfirmed"
+          ],
+          "citations_must_include": [
+            "INS-0001-0203",
+            "CTX-0001-003"
+          ],
+          "conflicts_min": 1
+        }
+      }
+    ]
+  },
+  "Q18": {
+    "id": "Q18",
+    "question_text": "Was the 20 Aug spill at WELL-0101 real oil?",
+    "user_id": "U-203",
+    "conversation": "Q18",
+    "depends_on": [],
+    "runs_after": [],
+    "notes": "INS-0101-0197 flagged 1.0 bbl ('Oil sheen around cellar'). Ryan Brooks (CTX-0101-002) thought produced water; Chris Dalton (HSE, CTX-0101-003) sampled and confirmed crude. Neither is a formal correction and spill repair MNT-0101-029 exists -> detection stands. Answer yes, but show the disagreement and both sources.",
+    "expected": {
+      "visual_type": null,
+      "text_contains": [
+        "INS-0101-0197",
+        "Ryan Brooks",
+        "Chris Dalton",
+        "CTX-0101-002",
+        "CTX-0101-003",
+        [
+          "yes",
+          "crude",
+          "real oil",
+          "confirmed"
+        ]
+      ],
+      "text_contains_optional": [
+        "MNT-0101-029",
+        "1.0"
+      ],
+      "citations_must_include": [
+        "INS-0101-0197",
+        "CTX-0101-002",
+        "CTX-0101-003"
+      ],
+      "conflicts_min": 1
+    }
+  }
+}

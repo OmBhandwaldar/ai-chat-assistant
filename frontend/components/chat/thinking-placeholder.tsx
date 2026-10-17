@@ -20,7 +20,8 @@ export function ThinkingPlaceholder({ label = "Generating..." }: { label?: strin
             key={i}
             className="h-1 w-1 rounded-full bg-neutral-300"
             style={{
-              opacity: 0.3 + Math.random() * 0.7,
+              // Deterministic "random" so re-renders don't make the dots flicker.
+              opacity: 0.3 + (((i * 2654435761) >>> 0) % 100) / 100 * 0.7,
               animationDelay: `${(i % cols) * 40}ms`,
             }}
           />

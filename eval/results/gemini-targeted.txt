@@ -1,0 +1,41 @@
+LIVE run: 11 question(s), 17 agent turn(s) (~70 s each on the free tier).
+DB: /var/folders/43/k3f6dsz554b253970_wmtmsr0000gn/T/eval-db-jhoac_k1/data.duckdb  (temp copy)  mode: live/gemini
+Q3
+  [PASS] Q3         U-203  13.9s  Show a line chart of WELL-0001's wellhead temperature against air temp
+Q6 (prerequisite)
+Primary LLM request failed, falling back to Ollama: ReadTimeout
+  [PASS] Q6         U-201 125.0s  Which 3 wells in Northeast Block 7 had the most downtime in the last 4
+Q8
+  [PASS] Q8         U-203   9.1s  Show a heatmap of 2026 spills by geographic area and month.
+Q10
+  [PASS] Q10        U-203   6.9s  In Southwest Block 24, which spills in the last 90 days were not conta
+Q11 (prerequisite)
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+  [PASS] Q11        U-201  28.1s  For the three wells we discussed yesterday, what have repairs cost thi
+Q12
+W1017 17:15:33.273000 91885 torch/distributed/elastic/multiprocessing/redirects.py:35] NOTE: Redirects are currently not supported in MacOs.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 10933.97it/s]
+  [PASS] Q12        U-201  35.6s  The 15 Oct reading for WELL-0164 is wrong. The handheld thermal gun us
+  [PASS] Q12b       U-201  10.6s  Which wells in Northeast Block 8 are not producing oil right now, and 
+Q13 (prerequisite)
+Primary LLM request failed, falling back to Ollama: ReadTimeout
+  [PASS] Q13        U-201 192.5s  The AI estimated the 24 Sep spill at WELL-0151 as 4.5 bbl. The field c
+Q14
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+  [ERR ] Q14a       U-201 300.0s  Which wells in Northeast Block 7 need a root-cause analysis on their p
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+  [ERR ] Q14-rule   U-201 300.0s  Note for all T350 wells: our team now wants a pump jack root-cause ana
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+  [ERR ] Q14        U-201 300.0s  Which wells in Northeast Block 7 need a root-cause analysis on their p
+Q15
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+Primary LLM request failed, falling back to Ollama: status_code: 429, model_name: gemini-3.8-flash, body: {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head t
+/Users/omb/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

@@ -1,0 +1,5 @@
+LIVE run: 11 question(s), 17 agent turn(s) (~70 s each on the free tier).
+DB: /var/folders/43/k3f6dsz554b253970_wmtmsr0000gn/T/eval-db-ed30popp/data.duckdb  (temp copy)  mode: live/ollama
+Q3
+  [ERR ] Q3         U-203 220.0s  Show a line chart of WELL-0001's wellhead temperature against air temp
+Q6 (prerequisite)

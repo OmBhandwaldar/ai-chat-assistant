@@ -31,6 +31,9 @@ See PLAN.md Phase 2.1, REQUIREMENTS_COVERAGE.md section C.
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date, datetime
 from typing import Any
 
@@ -41,7 +44,38 @@ from backend.models.schemas import Conflict, WellState
 # Words in an inspector's free-text note that imply the well is stopped.
 # Used to flag the "override-flipped-to-producing-but-note-says-stopped"
 # conflict in Q12.
+_UPCOMING_NOTE_DAYS = 90
+
 _STOPPED_WORDS = ("not moving", "stopped", "shut in", "shutdown", "down", "offline")
+
+
+_DOWN_RE = re.compile(
+    r"\b(shut[- ]?in|shutdown|shut down|down|stopped|offline|off[- ]line|not (?:\w+ )?"
+    r"(?:running|producing|operating|working|online|fine|ok)|isn't (?:running|producing|"
+    r"operating|working|online|fine)|is not (?:running|producing|operating|working|online|"
+    r"fine))\b",
+    re.IGNORECASE,
+)
+_UP_RE = re.compile(
+    r"\b(running|online|producing|operating|working|fine|up and running)\b", re.IGNORECASE
+)
+_BACK_ONLINE_RE = re.compile(r"\b(back online|back up|restarted|resumed)\b", re.IGNORECASE)
+
+
+def classify_claim(text: str) -> tuple[bool, bool]:
+    """Return (implies_producing, implies_down) for a free-text claim.
+
+    Negations ("not running", "isn't producing") count as *down*, not as the
+    positive keyword they contain. A claim that reads both ways round ("shut in
+    until back online") or neither way implies nothing, so it never raises a
+    conflict by itself; the agent still sees the raw text.
+    """
+    down = bool(_DOWN_RE.search(text))
+    positive_text = _DOWN_RE.sub(" ", text)
+    up = bool(_UP_RE.search(positive_text)) or bool(_BACK_ONLINE_RE.search(text))
+    if up and down:
+        return False, False
+    return up, down
 
 
 def _fmt_date(value: Any) -> str:
@@ -91,7 +125,7 @@ def resolve_well_state(
         )
 
     (
-        inspection_id, inspected_at, wellhead_c, ambient_c, delta_c,
+        inspection_id, inspected_at, _wellhead_c, _ambient_c, delta_c,
         threshold_c, is_producing, well_type, inspector_id, method, insp_notes,
     ) = row
 
@@ -113,20 +147,22 @@ def resolve_well_state(
     # 2. Any inspection-scoped override that was applied — mention the author.
     override_rows = conn.execute(
         """
-        SELECT field, author_user_id, reason, new_value
+        SELECT id, field, author_user_id, reason, new_value, original_value
         FROM overrides
         WHERE scope_type = 'inspection' AND scope_id = ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id DESC
         """,
         [inspection_id],
     ).fetchall()
     override_fields: set[str] = set()
-    for field, author_id, reason_text, new_value in override_rows:
+    for override_id, field, author_id, reason_text, new_value, original_value in override_rows:
         override_fields.add(field)
         author = _user_name(conn, author_id)
         snippet = f"'{reason_text}'" if reason_text else "no reason given"
+        was = f", was {original_value}" if original_value is not None else ""
         reasons.append(
-            f"Reading corrected by {author}: {field} set to {new_value} ({snippet})."
+            f"Reading corrected by {author} (override #{override_id}): "
+            f"{field} set to {new_value}{was} ({snippet})."
         )
 
     # 3. Active context notes on the well (valid at as_of).
@@ -149,6 +185,26 @@ def resolve_well_state(
             continue
         author = _user_name(conn, author_id)
         reasons.append(f"Note {note_id} by {author} ({note_type}): {text}")
+
+    # 3b. Notes that start in the near future (Q16: "is any downtime planned?").
+    # They do not change today's state but must be visible to everyone asking.
+    upcoming_rows = conn.execute(
+        """
+        SELECT note_id, note_type, author_user_id, text, valid_from, valid_to
+        FROM context_notes
+        WHERE asset_id = ?
+          AND valid_from > ?
+          AND valid_from <= ? + INTERVAL (?) DAY
+        ORDER BY valid_from
+        """,
+        [asset_id, as_of.date(), as_of.date(), _UPCOMING_NOTE_DAYS],
+    ).fetchall()
+    for note_id, note_type, author_id, text, vfrom, vto in upcoming_rows:
+        author = _user_name(conn, author_id)
+        window = f"from {_fmt_date(vfrom)}" + (f" to {_fmt_date(vto)}" if vto else "")
+        reasons.append(
+            f"Upcoming note {note_id} by {author} ({note_type}, {window}): {text}"
+        )
 
     # 4. Inspector's free-text note on this inspection.
     if insp_notes:
@@ -191,13 +247,7 @@ def resolve_well_state(
     ).fetchall()
     for _claim_id, user_id, text, _created_at in claim_rows:
         claimer = _user_name(conn, user_id)
-        lowered = text.lower()
-        claim_implies_producing = any(
-            kw in lowered for kw in ("running", "online", "producing", "back online", "fine")
-        )
-        claim_implies_down = any(
-            kw in lowered for kw in ("shut in", "down", "stopped", "offline", "shutdown")
-        )
+        claim_implies_producing, claim_implies_down = classify_claim(text)
         if is_producing and claim_implies_down:
             conflicts.append(
                 Conflict(
@@ -217,3 +267,126 @@ def resolve_well_state(
             )
 
     return WellState(state=state, reasons=reasons, conflicts=conflicts)
+
+
+# ---------------------------------------------------------------------------
+# Spill detection verdict (Q18: people disagree about the AI's analysis)
+# ---------------------------------------------------------------------------
+
+_DISMISS_RE = re.compile(
+    r"produced water|rain ?water|only water|water only|washout|"
+    r"not (?:a )?(?:crude|oil|spill|real)",
+    re.IGNORECASE,
+)
+_CONFIRM_RE = re.compile(
+    r"\bcrude\b|detection stands|\bconfirmed\b|\bis oil\b|real (?:oil|spill)", re.IGNORECASE
+)
+
+
+@dataclass
+class InspectionNotesVerdict:
+    """What the notes on one spill inspection say, and whether the detection stands."""
+
+    inspection_id: str
+    detection_stands: bool
+    notes: list[dict[str, Any]] = dc_field(default_factory=list)
+    conflicts: list[Conflict] = dc_field(default_factory=list)
+    basis: list[str] = dc_field(default_factory=list)
+    repair_ids: list[str] = dc_field(default_factory=list)
+
+
+def resolve_inspection_notes(
+    conn: duckdb.DuckDBPyConnection, inspection_id: str
+) -> InspectionNotesVerdict:
+    """Decide whether a spill detection stands and surface disagreeing notes.
+
+    Rules (Q4 / Q18):
+      - A *formal* correction (context note of type 'correction' on this
+        inspection, or a spill_detected=false override) removes the detection.
+      - Informal notes (operator_feedback / operator_note that mention the
+        inspection id) never remove it. When two of them take opposite sides
+        ("produced water" vs "crude oil") both are returned as a
+        `note_vs_note` conflict; neither is silently preferred.
+      - A spill repair triggered by this inspection is further evidence that
+        the detection was acted on as real.
+    """
+    row = conn.execute(
+        "SELECT asset_id FROM inspections WHERE inspection_id = ?", [inspection_id]
+    ).fetchone()
+    if row is None:
+        return InspectionNotesVerdict(inspection_id, detection_stands=False,
+                                      basis=[f"No inspection {inspection_id} in the data."])
+    asset_id = row[0]
+
+    stands = conn.execute(
+        "SELECT 1 FROM v_corrected_spills WHERE inspection_id = ?", [inspection_id]
+    ).fetchone() is not None
+
+    note_rows = conn.execute(
+        """
+        SELECT note_id, note_type, author_user_id, text, created_at
+        FROM context_notes
+        WHERE asset_id = ? AND (inspection_id = ? OR text LIKE '%' || ? || '%')
+        ORDER BY created_at, note_id
+        """,
+        [asset_id, inspection_id, inspection_id],
+    ).fetchall()
+
+    notes: list[dict[str, Any]] = []
+    dismissers: list[dict[str, Any]] = []
+    confirmers: list[dict[str, Any]] = []
+    formal: list[str] = []
+    for note_id, note_type, author_id, text, created_at in note_rows:
+        if note_type == "correction":
+            formal.append(note_id)
+        stance = (
+            "dismisses" if _DISMISS_RE.search(text)
+            else "confirms" if _CONFIRM_RE.search(text)
+            else "neutral"
+        )
+        entry = {
+            "note_id": note_id, "note_type": note_type, "author": _user_name(conn, author_id),
+            "author_user_id": author_id, "text": text, "stance": stance,
+            "created_at": str(created_at),
+        }
+        notes.append(entry)
+        if note_type != "correction":
+            if stance == "dismisses":
+                dismissers.append(entry)
+            elif stance == "confirms":
+                confirmers.append(entry)
+
+    conflicts = [
+        Conflict(
+            type="note_vs_note",
+            left=f'{d["author"]} ({d["note_id"]}): "{d["text"]}"',
+            right=f'{c["author"]} ({c["note_id"]}): "{c["text"]}"',
+        )
+        for d in dismissers for c in confirmers
+    ]
+
+    repair_ids = [
+        r[0] for r in conn.execute(
+            "SELECT maintenance_id FROM maintenance WHERE triggered_by_inspection_id = ? "
+            "ORDER BY started_at",
+            [inspection_id],
+        ).fetchall()
+    ]
+
+    basis: list[str] = []
+    if formal:
+        basis.append(f"Formal correction note(s) {', '.join(formal)} remove this detection.")
+    elif not stands:
+        basis.append("A spill_detected=false override removes this detection.")
+    else:
+        basis.append(
+            f"There is no formal correction for {inspection_id} (no 'correction' note, "
+            "no spill_detected override), so the detection stands."
+        )
+    if repair_ids and stands:
+        basis.append(f"Spill repair {', '.join(repair_ids)} was done for this inspection.")
+
+    return InspectionNotesVerdict(
+        inspection_id=inspection_id, detection_stands=stands, notes=notes,
+        conflicts=conflicts, basis=basis, repair_ids=repair_ids,
+    )

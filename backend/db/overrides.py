@@ -39,6 +39,38 @@ _ORIGINAL_VALUE_LOOKUP: dict[tuple[str, str], tuple[str, str, str]] = {
 }
 
 
+# Fields that the views in views.sql actually honour, per scope. An override on
+# any other field would be stored but silently ignored by every read, so
+# record_override() rejects it up front (the caller / agent can retry).
+_SUPPORTED_FIELDS: dict[str, frozenset[str]] = {
+    "inspection": frozenset(
+        {"wellhead_temp_c", "spill_est_volume_bbl", "spill_detected"}
+    ),
+    "well_type": frozenset({"rca_corrective_count"}),
+}
+
+
+def _coerce_value(scope_type: str, field: str, value: Any) -> Any:
+    """Normalise an LLM-supplied value to the type the views CAST it to."""
+    try:
+        if field in ("wellhead_temp_c", "spill_est_volume_bbl"):
+            return float(value)
+        if field == "rca_corrective_count":
+            number = float(value)
+            if number != int(number) or number < 1:
+                raise ValueError(number)
+            return int(number)
+        if field == "spill_detected":
+            if isinstance(value, str):
+                return value.strip().lower() in ("true", "yes", "1")
+            return bool(value)
+    except (TypeError, ValueError) as exc:
+        raise InvalidOverrideScope(
+            f"Invalid value {value!r} for {scope_type} field {field!r}."
+        ) from exc
+    return value
+
+
 class InvalidOverrideScope(ValueError):
     """Raised when (scope_type, scope_id, field) doesn't resolve to a real row."""
 
@@ -54,7 +86,7 @@ def _fetch_original_value(
         return None
     table, id_col, value_col = _ORIGINAL_VALUE_LOOKUP[key]
     row = conn.execute(
-        f"SELECT {value_col} FROM {table} WHERE {id_col} = ?", [scope_id]  # noqa: S608 (fixed lookup table)
+        f"SELECT {value_col} FROM {table} WHERE {id_col} = ?", [scope_id]
     ).fetchone()
     if row is None:
         raise InvalidOverrideScope(
@@ -83,6 +115,23 @@ def record_override(
     """
     if scope_type not in ("inspection", "well", "well_type", "global"):
         raise ValueError(f"Unknown scope_type: {scope_type!r}")
+
+    scope_id = scope_id.strip()
+    if scope_type == "well_type":
+        scope_id = scope_id.upper()  # 't350' -> 'T350': scope ids are case-sensitive in SQL
+    supported = _SUPPORTED_FIELDS.get(scope_type)
+    if supported is not None and field not in supported:
+        raise InvalidOverrideScope(
+            f"Field {field!r} cannot be overridden at scope {scope_type!r}; "
+            f"supported fields: {sorted(supported)}."
+        )
+    new_value = _coerce_value(scope_type, field, new_value)
+    if scope_type == "well_type":
+        known = {r[0] for r in conn.execute("SELECT well_type FROM well_type_rules").fetchall()}
+        if scope_id not in known:
+            raise InvalidOverrideScope(
+                f"Unknown well type {scope_id!r}; known well types: {sorted(known)}."
+            )
 
     original = _fetch_original_value(conn, scope_type, scope_id, field)
 
@@ -169,7 +218,7 @@ def apply_overrides_to_rule(
         raise ValueError(f"Unknown well_type_rules column: {rule_name!r}")
 
     row = conn.execute(
-        f"SELECT {rule_name} FROM v_well_type_rules_effective WHERE well_type = ?",  # noqa: S608
+        f"SELECT {rule_name} FROM v_well_type_rules_effective WHERE well_type = ?",
         [well_type],
     ).fetchone()
     if row is None:

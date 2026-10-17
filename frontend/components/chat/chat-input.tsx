@@ -23,7 +23,7 @@ export function ChatInput({ onSend, isStreaming, onStop }: ChatInputProps) {
 
   function handleSend() {
     const text = value.trim();
-    if (!text) return;
+    if (!text || isStreaming) return;
     onSend(text);
     setValue("");
   }

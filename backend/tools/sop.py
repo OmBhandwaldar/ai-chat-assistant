@@ -30,8 +30,9 @@ from typing import Any, Literal
 
 import duckdb
 
+from backend.db.scope import resolve_scope, unresolved_fields
 from backend.models.schemas import Evidence, ToolResult
-from backend.tools.sop_rules import SopRule, extract_threshold, load_sop_rules
+from backend.tools.sop_rules import load_sop_rules
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -108,7 +109,22 @@ def _as_date(val: Any) -> date | None:
             return date.fromisoformat(val[:10])
         except ValueError:
             return None
+    date_fn = getattr(val, "date", None)
+    if callable(date_fn):
+        try:
+            coerced = date_fn()
+            if isinstance(coerced, datetime):
+                return coerced.date()
+            if isinstance(coerced, date):
+                return coerced
+        except (TypeError, ValueError):
+            pass
     return None
+
+
+def _coerce_as_of(val: date | datetime | None) -> date:
+    """Normalize eval/live `Deps.as_of` (often midnight datetime) to a calendar date."""
+    return _as_date(val) or date(2026, 10, 16)
 
 
 def _fmt(d: date | None) -> str:
@@ -131,7 +147,7 @@ def sop_breaches(
     Returns ToolResult wrapping SopBreachResult with three lists:
     breaches (deadline missed), open_items (pending), met (confirmed ok).
     """
-    as_of = as_of or date(2026, 10, 16)  # "today" per eval spec
+    as_of = _coerce_as_of(as_of)
     window_start = as_of - timedelta(days=lookback_days)
 
     # Load SOP rule texts for quoting.
@@ -237,7 +253,19 @@ def sop_breaches(
             hours = ev[6]  # hours_to_report
             ev_id = ev[0]
             evidence_ids.append(Evidence(source_type="regulatory", source_id=ev_id))
-            if hours is not None and hours > 24:
+            if hours is None:
+                # Filed, but the dataset does not say how long it took: cannot call it
+                # compliant (or a breach), so surface it as something to verify.
+                open_items.append(SopFinding(
+                    protocol_id="SR-01",
+                    rule_text_quote=_rule_text("SR-01"),
+                    status="open",
+                    detail=f"Report {ev_id} filed for {volume:.1f} bbl spill but hours_to_report "
+                           f"is not recorded; the 24 h limit cannot be verified.",
+                    evidence_id=ev_id,
+                    due_by=deadline.strftime("%Y-%m-%d %H:%M"),
+                ))
+            elif hours > 24:
                 breaches.append(SopFinding(
                     protocol_id="SR-01",
                     rule_text_quote=_rule_text("SR-01"),
@@ -271,12 +299,14 @@ def sop_breaches(
                     evidence_id=ev_id,
                 ))
         else:
-            # No report filed at all
+            # No report filed at all. It is only a breach once the 24 h deadline has passed
+            # (as_of is a date = end of that day); before that it is an open action.
             evidence_ids.append(Evidence(source_type="inspection", source_id=insp_id))
-            breaches.append(SopFinding(
+            overdue = deadline <= datetime.combine(as_of, datetime.max.time())
+            (breaches if overdue else open_items).append(SopFinding(
                 protocol_id="SR-01",
                 rule_text_quote=_rule_text("SR-01"),
-                status="breach",
+                status="breach" if overdue else "open",
                 detail=f"No written notice on record for reportable spill of {volume:.1f} bbl "
                        f"detected {_fmt(_as_date(inspected_at))}.",
                 evidence_id=insp_id,
@@ -344,7 +374,7 @@ def sop_breaches(
                         detail=f"Verification closed ({v_id}).",
                         evidence_id=v_id,
                     ))
-                elif deadline_date <= as_of:
+                elif deadline_date < as_of:
                     breaches.append(SopFinding(
                         protocol_id="SR-03",
                         rule_text_quote=_rule_text("SR-03"),
@@ -365,7 +395,7 @@ def sop_breaches(
         else:
             # No verification event at all
             evidence_ids.append(Evidence(source_type="inspection", source_id=insp_id))
-            if deadline_date <= as_of:
+            if deadline_date < as_of:
                 breaches.append(SopFinding(
                     protocol_id="SR-03",
                     rule_text_quote=_rule_text("SR-03"),
@@ -468,15 +498,17 @@ def sop_breaches(
         if nov_date is None:
             continue
         response_deadline = nov_date + timedelta(days=30)
-        # Look for a nov_response_filed event after this NOV
+        # Look for a nov_response_filed event on/after this NOV; only one filed by the
+        # deadline (inclusive) satisfies the 30-day rule.
         responses = [
             r for r in reg_events
             if r[3] == "nov_response_filed"
             and _as_date(r[1]) is not None
             and _as_date(r[1]) >= nov_date
         ]
+        on_time = [r for r in responses if _as_date(r[1]) <= response_deadline]
         evidence_ids.append(Evidence(source_type="regulatory", source_id=nov_id))
-        if responses:
+        if on_time:
             met.append(SopFinding(
                 protocol_id="RC-04",
                 rule_text_quote=_rule_text("RC-04"),
@@ -484,7 +516,18 @@ def sop_breaches(
                 detail=f"Response filed for {nov_id}.",
                 evidence_id=nov_id,
             ))
-        elif response_deadline <= as_of:
+        elif responses:
+            late = _as_date(responses[0][1])
+            breaches.append(SopFinding(
+                protocol_id="RC-04",
+                rule_text_quote=_rule_text("RC-04"),
+                status="breach",
+                detail=f"NOV {nov_id} on {_fmt(nov_date)} required response by "
+                       f"{_fmt(response_deadline)}; response filed late on {_fmt(late)}.",
+                evidence_id=nov_id,
+                due_by=response_deadline.isoformat(),
+            ))
+        elif response_deadline < as_of:
             breaches.append(SopFinding(
                 protocol_id="RC-04",
                 rule_text_quote=_rule_text("RC-04"),
@@ -621,6 +664,88 @@ def sop_breaches(
     return ToolResult[dict](
         data={"breaches": breaches, "open_items": open_items, "met": met},
         evidence=evidence_ids,
+    )
+
+
+def containment_breaches(
+    conn: duckdb.DuckDBPyConnection,
+    area_id: str | None = None,
+    days: int = 90,
+    as_of: datetime | date | None = None,
+) -> ToolResult[dict]:
+    """Spills whose repair report says containment took more than 4 h (SR-02, Q10).
+
+    Containment time lives only in the repair-report text. This is the area-scoped
+    query so a "which spills were not contained in time" question does not become a map.
+    """
+    if as_of is None:
+        as_of_dt = datetime(2026, 10, 16)
+    elif isinstance(as_of, datetime):
+        as_of_dt = as_of
+    else:
+        as_of_dt = datetime.combine(as_of, datetime.min.time())
+    window_start = as_of_dt - timedelta(days=days)
+    scope = resolve_scope(conn, area_id=area_id)
+    if not scope.ok:
+        return ToolResult[dict](
+            data={
+                "start": window_start.date().isoformat(),
+                "end": as_of_dt.date().isoformat(),
+                "limit_hours": 4.0,
+                "rows": [],
+                **unresolved_fields(scope),
+            },
+            evidence=[],
+        )
+
+    conditions = ["cs.inspected_at >= ?", "cs.inspected_at <= ?"]
+    params: list[Any] = [window_start, as_of_dt]
+    if scope.area_id is not None:
+        conditions.append("cs.area_id = ?")
+        params.append(scope.area_id)
+    rows = conn.execute(
+        f"""
+        SELECT cs.inspection_id, w.asset_id, w.name, cs.inspected_at,
+               cs.spill_est_volume_bbl, m.maintenance_id, mr.body
+        FROM v_corrected_spills cs
+        JOIN wells w ON w.asset_id = cs.asset_id
+        JOIN maintenance m ON m.triggered_by_inspection_id = cs.inspection_id
+        JOIN maintenance_reports mr ON mr.maintenance_id = m.maintenance_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY cs.inspected_at, w.asset_id, m.maintenance_id
+        """,
+        params,
+    ).fetchall()
+
+    kept: list[dict] = []
+    evidence: list[Evidence] = []
+    seen: set[str] = set()
+    for inspection_id, asset_id, name, inspected_at, bbl, maintenance_id, body in rows:
+        hours = _parse_containment_hours(body or "")
+        if hours is None or hours <= 4.0 or maintenance_id in seen:
+            continue
+        seen.add(maintenance_id)
+        kept.append({
+            "asset_id": asset_id,
+            "name": name,
+            "inspection_id": inspection_id,
+            "maintenance_id": maintenance_id,
+            "hours": hours,
+            "bbl": bbl,
+            "date": inspected_at.date().isoformat() if isinstance(inspected_at, datetime) else str(inspected_at)[:10],
+        })
+        evidence.append(Evidence(source_type="maintenance", source_id=maintenance_id))
+        evidence.append(Evidence(source_type="inspection", source_id=inspection_id))
+
+    return ToolResult[dict](
+        data={
+            "start": window_start.date().isoformat(),
+            "end": as_of_dt.date().isoformat(),
+            "limit_hours": 4.0,
+            "area_id": scope.area_id,
+            "rows": kept,
+        },
+        evidence=evidence,
     )
 
 
